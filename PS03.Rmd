@@ -1,6 +1,6 @@
 ---
 title: "STAT/MATH 495: Problem Set 03"
-author: "WRITE YOUR NAME HERE"
+author: "Christien Wright"
 date: "2017-09-26"
 output:
   html_document:
@@ -16,29 +16,159 @@ knitr::opts_chunk$set(echo = TRUE, fig.width=8, fig.height=4.5)
 
 # Load packages
 library(tidyverse)
+library(caret)
+library(caTools)
+library(mosaic)
+library(dplyr)
+
 data1 <- read_csv("data/data1.csv")
 data2 <- read_csv("data/data2.csv")
 ```
-
-
 # Question
 
 For both `data1` and `data2` tibbles (a tibble is a data frame with some
 [metadata](https://blog.rstudio.com/2016/03/24/tibble-1-0-0#tibbles-vs-data-frames) attached):
 
-* Find the splines model with the best out-of-sample predictive ability.
-* Create a visualizaztion arguing why you chose this particular model.
+* Find the splines model with the best out-of-sample predictive ability. 
+* Create a visualizaztion arguing why you chose this particular model. 
 * Create a visualizaztion of this model plotted over the given $(x_i, y_i)$ points for $i=1,\ldots,n=3000$.
-* Give your estimate $\widehat{\sigma}$ of $\sigma$ where the noise component $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$.
+* Give your estimate $\widehat{\sigma}$ of $\sigma$ where the noise component $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$. 
 
+# Cross Validation
 
 # Data 1
 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
+#Split Data into Training and Test Sets
+set.seed(200)
+
+DataRandom <- sample_n(data1, 3000, replace=FALSE) #Randomize data
+
+Train1 <- as.data.frame(split(DataRandom, rep(1:5,600), drop=FALSE)[1])
+colnames(Train1) <- c("ID", "x", "y")
+
+Train2 <- as.data.frame(split(DataRandom, rep(1:5,600), drop=FALSE)[2])
+colnames(Train2) <- c("ID", "x", "y")
+
+Train3 <- as.data.frame(split(DataRandom, rep(1:5,600), drop=FALSE)[3])
+colnames(Train3) <- c("ID", "x", "y")
+
+Train4 <- as.data.frame(split(DataRandom, rep(1:5,600), drop=FALSE)[4])
+colnames(Train4) <- c("ID", "x", "y")
+
+Train5 <- as.data.frame(split(DataRandom, rep(1:5,600), drop=FALSE)[5])
+colnames(Train5) <- c("ID", "x", "y")
+
+Test1 <- anti_join(DataRandom, Train1, by="ID") #Test sets
+Test2 <- anti_join(DataRandom, Train2, by="ID")
+Test3 <- anti_join(DataRandom, Train3, by="ID")
+Test4 <- anti_join(DataRandom, Train4, by="ID")
+Test5 <- anti_join(DataRandom, Train5, by="ID")
 ```
+
+```{r}
+#Create MSE function
+
+MSE <- function(x, Train1, Test1){
+  spline1 <- smooth.spline(Train1$x, Train1$y, df=x)
+  calc <- predict(spline1, Test1$y) %>%
+    tibble::as.tibble()
+  mean((Test1[,2]-calc$y)^2)
+}
+
+#Find optimal degrees of Freedom
+
+set.seed(104)
+
+degreefx <- c(1:30)
+degreefy <- c(1:30)
+
+for(i in 2:31) {
+  degreefy[i-1] <- (sqrt(MSE(i, Train1, Test1))+sqrt(MSE(i,Train2, Test2))+sqrt(MSE(i,Train3, Test3))+sqrt(MSE(i,Train4, Test4))+sqrt(MSE(i,Train5, Test5)))/5
+}
+
+MSEplot <- as.data.frame(degreefx, degreefy)
+MSEggplot <- ggplot(MSEplot, aes(x=degreefx, y=degreefy))+geom_point()+xlab("Degrees of Freedom")+ylab("Root MSE")
+MSEggplot
+
+```
+As we can see by the graph, the optimal degrees of freedom for the model via cross-validation is 19 as it corresponds to the smalles Root Mean Squared Error.
+
+Now I will create a splines model using the original data with this degrees of freedom.
+
+```{r}
+smooth.spline(Data1$x, Data1$y, df=19) %>%
+  broom::augment() %>% 
+  ggplot(aes(x=x)) +
+  geom_point(aes(y=y)) +
+  geom_line(aes(y=.fitted), col="red", size=1)
+```
+My estimate of $\widehat{\sigma}$ of $\sigma$ where the noise component $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$ based on the graph would be 42.
 
 # Data 2
 
 ```{r, echo=TRUE, warning=FALSE, message=FALSE}
+set.seed(200)
+
+DataRandom2 <- sample_n(data2, 3000, replace=FALSE) #Randomize data
+
+Training1 <- as.data.frame(split(DataRandom2, rep(1:5,600), drop=FALSE)[1])
+colnames(Training1) <- c("ID", "x", "y")
+
+Training2 <- as.data.frame(split(DataRandom2, rep(1:5,600), drop=FALSE)[2])
+colnames(Training2) <- c("ID", "x", "y")
+
+Training3 <- as.data.frame(split(DataRandom2, rep(1:5,600), drop=FALSE)[3])
+colnames(Training3) <- c("ID", "x", "y")
+
+Training4 <- as.data.frame(split(DataRandom2, rep(1:5,600), drop=FALSE)[4])
+colnames(Training4) <- c("ID", "x", "y")
+
+Training5 <- as.data.frame(split(DataRandom2, rep(1:5,600), drop=FALSE)[5])
+colnames(Training5) <- c("ID", "x", "y")
+
+Testing1 <- anti_join(DataRandom2, Training1, by="ID") #Test sets
+Testing2 <- anti_join(DataRandom2, Training2, by="ID")
+Testing3 <- anti_join(DataRandom2, Training3, by="ID")
+Testing4 <- anti_join(DataRandom2, Training4, by="ID")
+Testing5 <- anti_join(DataRandom2, Training5, by="ID")
+
 ```
 
+
+```{r}
+MSE2 <- function(x, Training1, Testing1){
+  spline2 <- smooth.spline(Training1$x, Training1$y, df=x)
+  calc2 <- predict(spline2, Testing1$y) %>%
+    tibble::as.tibble()
+  mean((Testing1[,2]-calc2$y)^2)
+}
+
+#Find optimal degrees of Freedom
+
+set.seed(104)
+
+degreefx2 <- c(1:30)
+degreefy2 <- c(1:30)
+
+for(i in 2:31) {
+  degreefy2[i-1] <- (sqrt(MSE2(i, Training1, Testing1))+sqrt(MSE2(i,Training2, Testing2))+sqrt(MSE2(i,Training3, Testing3))+sqrt(MSE2(i,Training4, Testing4))+sqrt(MSE2(i,Training5, Testing5)))/5
+}
+
+MSEplot2 <- as.data.frame(degreefx2, degreefy2)
+MSEggplot2 <- ggplot(MSEplot2, aes(x=degreefx2, y=degreefy2))+geom_point()+xlab("Degrees of Freedom")+ylab("Root MSE")
+MSEggplot2
+
+```
+The optimal degrees of freedom for data2 is 15. Thus I will use this DF to create the splines model.
+
+
+```{r}
+smooth.spline(data2$x, data2$y, df=15) %>%
+  broom::augment() %>% 
+  ggplot(aes(x=x)) +
+  geom_point(aes(y=y)) +
+  geom_line(aes(y=.fitted), col="red", size=1)
+```
+
+My estimate $\widehat{\sigma}$ of $\sigma$ where the noise component $\epsilon_i$ is distributed with mean 0 and standard deviation $\sigma$ would be 40.5.
